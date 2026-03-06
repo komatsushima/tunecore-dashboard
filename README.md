@@ -1,101 +1,83 @@
-# TuneCore Japan Report Dashboard
+# 📊 TuneCore Japan レポート ダッシュボード
 
-A drag-and-drop dashboard for visualizing TuneCore Japan CSV reports — streaming revenue, YouTube monetization, Meta (Instagram), and TikTok/UGC — all in a single HTML file.
-
-![Dashboard Preview](screenshots/preview.png)
-
-## Features
-
-- **Drag & drop** CSV files to instantly visualize your music revenue data
-- **4 report types** supported: Streaming/DL, YouTube Monetization, Meta, TikTok/UGC
-- **Multi-month merge** — drop multiple months of the same report type and data is automatically aggregated
-- **Auto-detect encoding** — handles both SHIFT_JIS and UTF-8 CSV files from TuneCore Japan
-- **100% client-side** — no data is sent to any server. Everything runs in your browser
-- **Single HTML file** — no build tools, no dependencies to install, no server required
-- **Store-level insights** — per-store streaming unit price, revenue breakdowns, play count comparisons
-- **YouTube Shorts breakdown** — creation count, view count, and per-song ranking for Shorts
-- **Responsive design** — works on desktop and mobile
-
-## Supported Report Types
-
-| Report | File Pattern | Key Metrics |
-|--------|-------------|-------------|
-| Streaming/DL | `report_distribution_jisseki_*.csv` | Revenue, play count, DL count, per-store unit price |
-| YouTube | `report_youtube-monetization_jisseki_*.csv` | Views, revenue, Shorts breakdown, video count |
-| Meta | `report_facebook-music-product_jisseki_*.csv` | Plays, revenue by platform/event |
-| TikTok/UGC | `report_another_ugc_jisseki_*.csv` | Views, creations, revenue |
-
-## Usage
-
-1. Open `index.html` in your browser (or visit the [live demo](https://tunecore-dashboard.netlify.app))
-2. Download your monthly CSV reports from [TuneCore Japan](https://www.tunecore.co.jp/)
-3. Drag and drop 1–4 CSV files onto the drop zone
-4. Explore your revenue data!
-
-You can also drop multiple months of the same report type to see aggregated data across months.
-
-## Deploy Your Own
-
-Since this is a single HTML file with no build step, deployment is simple:
-
-### Netlify (recommended)
-
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/komatsushima/tunecore-dashboard)
-
-Or manually:
-1. Fork this repository
-2. Connect to [Netlify](https://app.netlify.com)
-3. Set publish directory to `/` (root)
-4. Deploy
-
-### GitHub Pages
-
-1. Go to repo Settings → Pages
-2. Set source to `main` branch, root `/`
-3. Save
-
-### Local
-
-Just open `index.html` in any modern browser. That's it.
-
-## Tech Stack
-
-- Vanilla HTML/CSS/JavaScript (no framework)
-- [Chart.js 4.4.1](https://www.chartjs.org/) (loaded from CDN)
-- [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP) (Google Fonts)
-
-## Privacy
-
-This dashboard processes all CSV data entirely in your browser. **No data is ever uploaded or transmitted to any server.** The CSV files never leave your machine.
-
-## License
-
-[MIT](LICENSE)
-
-## Author
-
-**Ko Matsushima (arne)**
-- GitHub: [@komatsushima](https://github.com/komatsushima)
+TuneCore Japanから届く**確定レポート（CSV）**をドラッグ＆ドロップするだけで、収益・再生数を自動分析・可視化するダッシュボードです。
 
 ---
 
-# TuneCore Japan レポート ダッシュボード
+## ✨ 機能
 
-TuneCore Japanの確定レポート（CSV）をドラッグ＆ドロップするだけで、収益・再生数を可視化できるダッシュボードです。
+- **CSVをドラッグ＆ドロップ**するだけで即分析（アップロード不要・完全ブラウザ処理）
+- **4種類の確定レポート**に対応（著作権収益は現在未対応）
+- **複数月まとめて投入**すると自動で合算して表示
+- **楽曲別・アーティスト別・国別**の収益ランキング
+- **ストア別の再生単価**（1再生あたりいくらか）の比較
+- **YouTube Shorts** の作成数・再生数の内訳
 
-## 特徴
+---
 
-- **ドラッグ＆ドロップ**でCSVを投入するだけ
-- **4種類のレポート**に対応：ストリーミング・DL / YouTube収益化 / Meta / TikTok・UGC
-- **複数月まとめて投入**可能（同タイプは自動合算）
-- **SHIFT_JIS / UTF-8 自動判定**
-- **完全ローカル処理** — データはサーバーに一切送信されません
-- **単一HTMLファイル** — ビルド不要、サーバー不要
-- **ストア別再生単価**、YouTube Shorts内訳など詳細な分析
+## 🔒 プライバシーについて
 
-## 使い方
+CSVデータは**外部サーバーに一切送信されません**。すべてブラウザ内で処理されます。
 
-1. `index.html` をブラウザで開く（または[ライブデモ](https://tunecore-dashboard.netlify.app)にアクセス）
-2. TuneCore Japanから確定レポート（CSV）をダウンロード
-3. ダッシュボードにドラッグ＆ドロップ
-4. 収益データを確認！
+---
+
+## 🚀 使い方
+
+### 方法① そのままブラウザで使う（一番かんたん）
+
+👉 **[ダッシュボードを開く](https://tcj-report.netlify.app/)**
+
+1. 上のリンクを開く
+2. TuneCore Japanから届いたCSVをドラッグ＆ドロップ
+3. 自動で分析されます
+
+> 複数月のCSVをまとめて投入すれば、年間集計などもできます。
+
+---
+
+### 方法② 自分でホスティングする
+
+1. このリポジトリをForkする
+2. [Netlify](https://netlify.com) でGitHubと連携してデプロイ
+3. 以降はGitHubにファイルをアップするだけで自動反映
+
+> `index.html` をダウンロードしてブラウザで開くだけでも使えます。
+
+---
+
+## 📄 対応CSVについて
+
+TuneCore Japanが発行する以下の確定レポートに対応しています：
+
+| レポート種別 | CSVファイル名の例 | わかること |
+|:---|:---|:---|
+| ストリーミング・DL | `report_distribution_jisseki_YYYYMM.csv` | ストア別収益、再生回数、DL数、再生単価 |
+| YouTube 収益化 | `report_youtube-monetization_jisseki_YYYYMM.csv` | 視聴回数、収益、Shorts内訳、動画数 |
+| Meta（Instagram等） | `report_facebook-music-product_jisseki_YYYYMM.csv` | 再生数、プラットフォーム別・イベント別収益 |
+| TikTok・UGC | `report_another_ugc_jisseki_YYYYMM.csv` | 視聴回数、作成数、収益 |
+
+> ⚠️ 他社のレポートや、TuneCore Japanの著作権収益レポートには現在対応していません
+
+---
+
+## 🛠 技術情報
+
+| 項目 | 内容 |
+|------|------|
+| 使用ライブラリ | Chart.js (v4.4.1), Noto Sans JP (Google Fonts) |
+| 動作環境 | モダンブラウザ（Chrome / Firefox / Safari / Edge） |
+| サーバー不要 | 完全クライアントサイド処理 |
+| 文字コード | SHIFT_JIS / UTF-8 自動判定 |
+
+---
+
+## 📝 ライセンス
+
+MIT License — 自由に使用・改変・再配布していただいて構いません。
+
+---
+
+## 👤 作者
+
+**松島 功（arne）**
+[@komatsushima](https://github.com/komatsushima)
