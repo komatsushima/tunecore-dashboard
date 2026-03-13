@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TuneCore Japan レポート ダッシュボード</title>
+<link rel="icon" href="favicon.ico" type="image/x-icon">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="description" content="TuneCore Japanの確定レポート（CSV）をドラッグ＆ドロップで可視化するダッシュボード">
+<meta property="og:title" content="TuneCore Japan レポート ダッシュボード">
+<meta property="og:description" content="CSVをドロップするだけで収益・再生数を可視化。完全ローカル処理でデータは送信されません。">
+<meta property="og:image" content="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --card-hover: #f0f0f5;
+    --border: #e0e0e6;
+    --text: #1a1a2e;
+    --text-dim: #6b7280;
+    --accent-pink: #3b82f6;
+    --accent-blue: #8b5cf6;
+    --accent-purple: #8b5cf6;
+    --accent-green: #10b981;
+    --accent-orange: #f59e0b;
+    --accent-yellow: #f59e0b;
+    --gradient-1: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    --gradient-2: linear-gradient(135deg, #8b5cf6, #3b82f6);
+    --gradient-3: linear-gradient(135deg, #10b981, #3b82f6);
+    --gradient-4: linear-gradient(135deg, #f59e0b, #3b82f6);
+  }
+
+  body {
+    font-family: 'Noto Sans JP', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .header {
+    text-align: center;
+    padding: 40px 20px 20px;
+    position: relative;
+  }
+  .header h1 {
+    font-size: 2.2rem;
+    font-weight: 900;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6, #10b981);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientShift 6s ease infinite;
+  }
+  .header p { color: var(--text-dim); margin-top: 8px; font-size: 0.9rem; }
+
+  @keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  .drop-zone {
+    max-width: 900px;
+    margin: 20px auto;
+    border: 2px dashed var(--border);
+    border-radius: 20px;
+    padding: 50px 20px;
+    text-align: center;
+    transition: all 0.3s;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+  }
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(59,130,246,0.04), transparent 70%);
+    pointer-events: none;
+  }
+  .drop-zone.drag-over {
+    border-color: var(--accent-pink);
+    background: rgba(59,130,246,0.06);
+    transform: scale(1.01);
+    box-shadow: 0 0 40px rgba(59,130,246,0.12);
+  }
+  .drop-icon { font-size: 3rem; margin-bottom: 12px; }
+  .drop-zone h2 { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+  .drop-zone p { color: var(--text-dim); font-size: 0.85rem; }
+  .file-input { display: none; }
+
+  .loaded-files {
+    max-width: 900px;
+    margin: 0 auto 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    padding: 0 20px;
+  }
+  .file-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border-radius: 30px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .file-badge.distribution { background: rgba(59,130,246,0.1); color: #2563eb; border: 1px solid rgba(59,130,246,0.25); }
+  .file-badge.youtube { background: rgba(239,68,68,0.1); color: #dc2626; border: 1px solid rgba(239,68,68,0.25); }
+  .file-badge.facebook { background: rgba(59,130,246,0.08); color: #1d4ed8; border: 1px solid rgba(59,130,246,0.2); }
+  .file-badge.ugc { background: rgba(16,185,129,0.1); color: #059669; border: 1px solid rgba(16,185,129,0.25); }
+  .file-badge .x-btn { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+  .file-badge .x-btn:hover { opacity: 1; }
+
+  @keyframes popIn {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .period-label {
+    text-align: center;
+    margin: 10px 0 20px;
+    font-size: 1.1rem;
+    color: var(--text-dim);
+  }
+  .period-label span {
+    font-weight: 700;
+    font-size: 1.4rem;
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .summary-row {
+    max-width: 1300px;
+    margin: 0 auto 30px;
+    padding: 0 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .summary-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+    animation: slideUp 0.5s ease both;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .summary-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+  }
+  .summary-card .glow {
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    filter: blur(50px);
+    opacity: 0.15;
+    pointer-events: none;
+  }
+  .summary-card .label { font-size: 0.8rem; color: var(--text-dim); font-weight: 500; margin-bottom: 8px; }
+  .summary-card .value { font-size: 2rem; font-weight: 900; line-height: 1.1; }
+  .summary-card .sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 6px; }
+
+  @keyframes slideUp {
+    0% { transform: translateY(30px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  .section {
+    max-width: 1300px;
+    margin: 0 auto 40px;
+    padding: 0 20px;
+  }
+  .section-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title .emoji { font-size: 1.4rem; }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 20px;
+  }
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    animation: slideUp 0.6s ease both;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .chart-card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+  .chart-card canvas { width: 100% !important; }
+
+  .chart-card-full {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    animation: slideUp 0.6s ease both;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .chart-card-full h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+
+  .ranking-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .ranking-table th {
+    text-align: left;
+    padding: 10px 12px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .ranking-table td {
+    padding: 10px 12px;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .ranking-table tr:hover td { background: rgba(59,130,246,0.03); }
+  .ranking-table tr.top-rank td { font-size: 1.05rem; font-weight: 600; }
+  .ranking-table tr.top-rank td strong { font-size: 1.1rem; }
+  .ranking-table tr.top-rank .stat-val { font-size: 1.0rem; }
+  .ranking-table tr.rank-row-1 td { background: rgba(255,215,0,0.1); }
+  .ranking-table tr.rank-row-2 td { background: rgba(192,192,192,0.12); }
+  .ranking-table tr.rank-row-3 td { background: rgba(205,127,50,0.08); }
+  .rank-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.85rem;
+  }
+  .top-rank .rank-num { width: 34px; height: 34px; font-size: 1.05rem; }
+  .rank-1 { background: linear-gradient(135deg, #ffd700, #ff8c42); color: #000; box-shadow: 0 0 10px rgba(255,215,0,0.4); }
+  .rank-2 { background: linear-gradient(135deg, #c0c0c0, #9a9a9a); color: #000; box-shadow: 0 0 8px rgba(192,192,192,0.3); }
+  .rank-3 { background: linear-gradient(135deg, #cd7f32, #a0522d); color: #fff; box-shadow: 0 0 8px rgba(205,127,50,0.3); }
+  .rank-other { background: var(--border); color: var(--text-dim); }
+
+  .revenue-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    position: relative;
+    min-width: 60px;
+  }
+  .revenue-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.8s ease;
+  }
+
+  .stat-cell {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .stat-cell .stat-val {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 0.82rem;
+  }
+
+  #dashboard { display: none; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .confetti-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+    overflow: hidden;
+  }
+  .confetti-piece {
+    position: absolute;
+    width: 10px; height: 10px;
+    top: -20px;
+    animation: confettiFall linear forwards;
+  }
+  @keyframes confettiFall {
+    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+    100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+  }
+
+  @media (max-width: 600px) {
+    .header h1 { font-size: 1.5rem; }
+    .summary-card .value { font-size: 1.5rem; }
+    .chart-grid { grid-template-columns: 1fr; }
+    .drop-zone { padding: 30px 15px; }
+  }
+
+  .reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(59,130,246,0.08);
+    border: 1px solid rgba(59,130,246,0.25);
+    color: var(--accent-pink);
+    padding: 8px 20px;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 12px;
+  }
+  .reset-btn:hover { background: rgba(59,130,246,0.15); transform: scale(1.03); }
+
+  .footer {
+    text-align: center;
+    padding: 30px 20px 40px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+  .footer a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .footer a:hover { color: var(--accent-pink); }
+
+  .local-badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 30px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .local-badge span.icon { font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<div class="local-badge"><span class="icon">🔒</span> 100% ローカル処理</div>
+
+<div class="header">
+  <h1>TuneCore Japan レポート ダッシュボード</h1>
+  <p>確定レポート(CSV)をドラッグ&ドロップすると、収益・再生数を可視化します</p>
+</div>
+
+<div class="drop-zone" id="dropZone">
+  <div class="drop-icon">📂</div>
+  <h2>CSVファイルをここにドロップ</h2>
+  <p>ストリーミング・DL / YouTube収益化 / Meta / TikTok・UGC<br>複数月まとめてドロップOK（同タイプは自動合算）<br><span style="font-size:0.75rem;color:var(--text-dim)">SHIFT_JIS / UTF-8 対応</span></p>
+  <input type="file" class="file-input" id="fileInput" multiple accept=".csv">
+</div>
+
+<div class="loaded-files" id="loadedFiles"></div>
+
+<div id="dashboard"></div>
+
+<div class="footer">
+  Created by Ko Matsushima（arne）&nbsp;&nbsp;|&nbsp;&nbsp;<a href="https://github.com/komatsushima/tunecore-dashboard" target="_blank" rel="noopener">github.com/komatsushima/tunecore-dashboard</a>
+</div>
+
+<script>
+// ============================================================
+// TuneCore Japan Dashboard
+// ============================================================
+
+const REPORT_TYPES = {
+  distribution: {
+    label: 'ストリーミング・DL',
+    labelLong: 'ストリーミング・DL（Apple Music・Spotifyなど）',
+    color: '#3b82f6',
+    gradient: 'linear-gradient(135deg,#3b82f6,#2563eb)'
+  },
+  youtube: {
+    label: 'YouTube 収益化',
+    labelLong: 'YouTube 収益化',
+    color: '#ef4444',
+    gradient: 'linear-gradient(135deg,#ef4444,#dc2626)'
+  },
+  facebook: {
+    label: 'Meta',
+    labelLong: 'Meta（Instagramなど）',
+    color: '#8b5cf6',
+    gradient: 'linear-gradient(135deg,#8b5cf6,#7c3aed)'
+  },
+  ugc: {
+    label: 'TikTok・UGC',
+    labelLong: 'TikTok・UGC',
+    color: '#10b981',
+    gradient: 'linear-gradient(135deg,#10b981,#059669)'
+  },
+};
+
+let loadedData = {};
+let chartInstances = [];
+
+// ===== DETECT REPORT TYPE =====
+function detectReportType(headers) {
+  const h = headers.join(',');
+  if (h.includes('YouTube Video URL') || h.includes('RPM') || h.includes('YouTube収益合計')) return 'youtube';
+  if (h.includes('Facebook収益合計') || h.includes('プラットフォーム') || h.includes('イベント')) return 'facebook';
+  if (h.includes('販売形式') && h.includes('販売通貨')) return 'distribution';
+  if (h.includes('販売収益単価') && !h.includes('販売形式')) return 'ugc';
+  return 'distribution';
+}
+
+// ===== PARSE CSV =====
+async function parseCSV(file) {
+  let text;
+  try {
+    text = await file.text();
+    if (!text.includes('反映月') && !text.includes('実績月')) throw new Error('not utf8');
+  } catch {
+    const buf = await file.arrayBuffer();
+    text = new TextDecoder('shift_jis').decode(buf);
+  }
+  if (!text.includes('反映月') && !text.includes('実績月')) {
+    const buf = await file.arrayBuffer();
+    text = new TextDecoder('shift_jis').decode(buf);
+  }
+  return text.split(/\r?\n/).filter(l => l.trim()).map(parseCSVLine);
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (ch === '"') { inQuotes = false; }
+      else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// ===== PROCESS FILES =====
+const loadedFileCount = {};
+
+async function processFiles(files) {
+  for (const file of files) {
+    const rows = await parseCSV(file);
+    if (rows.length < 2) continue;
+    const headers = rows[0];
+    const type = detectReportType(headers);
+    const data = rows.slice(1).map(row => {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+      return obj;
+    });
+    // Merge: append to existing data instead of overwriting
+    if (loadedData[type]) {
+      loadedData[type] = loadedData[type].concat(data);
+    } else {
+      loadedData[type] = data;
+    }
+    loadedFileCount[type] = (loadedFileCount[type] || 0) + 1;
+  }
+  updateBadges();
+  renderDashboard();
+  launchConfetti();
+}
+
+function updateBadges() {
+  const container = document.getElementById('loadedFiles');
+  container.innerHTML = '';
+  Object.keys(loadedData).forEach(type => {
+    const count = loadedFileCount[type] || 1;
+    const badge = document.createElement('div');
+    badge.className = `file-badge ${type}`;
+    badge.innerHTML = `<span>${REPORT_TYPES[type].label}${count > 1 ? ' ×' + count : ''}</span><span class="x-btn" onclick="removeData('${type}')">✕</span>`;
+    container.appendChild(badge);
+  });
+}
+
+function removeData(type) {
+  delete loadedData[type];
+  delete loadedFileCount[type];
+  updateBadges();
+  if (Object.keys(loadedData).length === 0) {
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('dashboard').innerHTML = '';
+  } else {
+    renderDashboard();
+  }
+}
+
+// ===== FORMAT HELPERS =====
+function formatJPY(n) {
+  if (n >= 100000000) return '¥' + (n / 100000000).toFixed(1) + '億';
+  if (n >= 10000) return '¥' + Math.round(n).toLocaleString();
+  if (n >= 1) return '¥' + n.toFixed(0);
+  return '¥' + n.toFixed(2);
+}
+function formatCount(n) {
+  if (n >= 100000000) return (n / 100000000).toFixed(1) + '億回';
+  if (n >= 10000) return (n / 10000).toFixed(1) + '万回';
+  return n.toLocaleString() + '回';
+}
+function formatCountSimple(n) {
+  if (n >= 100000000) return (n / 100000000).toFixed(1) + '億';
+  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+  return n.toLocaleString();
+}
+
+// ===== AGGREGATE =====
+function getRevenue(row) {
+  return parseFloat(row['収益 (JPY)'] || row['販売収益合計 (JPY)'] || row['販売収益合計(JPY)'] || '0') || 0;
+}
+function getRequestCount(row) {
+  return parseInt(row['リクエスト数'] || row['再生数'] || '0') || 0;
+}
+// Store name normalization
+function normalizeStoreName(name) {
+  if (name.startsWith('auスマートパス')) return 'auスマートパス';
+  return name;
+}
+function groupBy(data, key) {
+  const map = {};
+  data.forEach(row => {
+    let k = row[key] || '(不明)';
+    if (key === 'ストア') k = normalizeStoreName(k);
+    if (!map[k]) map[k] = [];
+    map[k].push(row);
+  });
+  return map;
+}
+function sumBy(data, fn) { return data.reduce((s, r) => s + fn(r), 0); }
+function topN(map, fn, n = 10) {
+  return Object.entries(map)
+    .map(([key, rows]) => ({ key, value: fn(rows), rows }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, n);
+}
+
+// ===== DESTROY CHARTS =====
+function destroyCharts() {
+  chartInstances.forEach(c => c.destroy());
+  chartInstances = [];
+}
+
+// ===== CHART THEME =====
+Chart.defaults.color = '#6b7280';
+Chart.defaults.borderColor = 'rgba(0,0,0,0.08)';
+Chart.defaults.font.family = "'Noto Sans JP', sans-serif";
+
+// ===== RENDER DASHBOARD =====
+function renderDashboard() {
+  destroyCharts();
+  const dash = document.getElementById('dashboard');
+  dash.innerHTML = '';
+  dash.style.display = 'block';
+
+  const types = Object.keys(loadedData);
+  if (types.length === 0) { dash.style.display = 'none'; return; }
+
+  const allData = Object.values(loadedData).flat();
+  const periods = [...new Set(allData.map(r => r['実績月']).filter(Boolean))];
+  dash.innerHTML += `<div class="period-label">実績月: <span>${periods.join(', ')}</span></div>`;
+
+  // ===== SUMMARY CARDS =====
+  let totalRevenue = 0;
+  const revenueByType = {};
+  types.forEach(type => {
+    const rev = sumBy(loadedData[type], getRevenue);
+    totalRevenue += rev;
+    revenueByType[type] = rev;
+  });
+
+  let summaryHTML = '<div class="summary-row">';
+  summaryHTML += `
+    <div class="summary-card" style="animation-delay:0s">
+      <div class="glow" style="background:var(--accent-pink)"></div>
+      <div class="label">💰 今月のトータル収益</div>
+      <div class="value" style="background:var(--gradient-1);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${formatJPY(totalRevenue)}</div>
+      <div class="sub">全レポート合算（手数料引き後）</div>
+    </div>`;
+
+  types.forEach((type, i) => {
+    const info = REPORT_TYPES[type];
+    const rev = revenueByType[type];
+    const req = sumBy(loadedData[type], getRequestCount);
+    summaryHTML += `
+      <div class="summary-card" style="animation-delay:${(i+1)*0.1}s">
+        <div class="glow" style="background:${info.color}"></div>
+        <div class="label">${info.labelLong}</div>
+        <div class="value" style="background:${info.gradient};-webkit-background-clip:text;-webkit-text-fill-color:transparent">${formatJPY(rev)}</div>
+        <div class="sub">${req > 0 ? formatCount(req) : ''}</div>
+      </div>`;
+  });
+  summaryHTML += '</div>';
+  dash.innerHTML += summaryHTML;
+
+  // ===== OVERVIEW (multiple types) =====
+  if (types.length > 1) {
+    dash.innerHTML += `
+      <div class="section">
+        <div class="section-title"><span class="emoji">📊</span> 収益の内訳（レポート種別）</div>
+        <div class="chart-grid">
+          <div class="chart-card"><h3>収益構成比</h3><canvas id="chart-type-pie"></canvas></div>
+          <div class="chart-card"><h3>収益比較</h3><canvas id="chart-type-bar"></canvas></div>
+        </div>
+      </div>`;
+    setTimeout(() => {
+      const pieCtx = document.getElementById('chart-type-pie');
+      if (pieCtx) {
+        chartInstances.push(new Chart(pieCtx, {
+          type: 'doughnut',
+          data: {
+            labels: types.map(t => REPORT_TYPES[t].label),
+            datasets: [{ data: types.map(t => revenueByType[t]), backgroundColor: types.map(t => REPORT_TYPES[t].color), borderWidth: 0, hoverOffset: 10 }]
+          },
+          options: { cutout: '60%', plugins: { legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, font: { size: 12 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatJPY(ctx.parsed)}` } } } }
+        }));
+      }
+      const barCtx = document.getElementById('chart-type-bar');
+      if (barCtx) {
+        chartInstances.push(new Chart(barCtx, {
+          type: 'bar',
+          data: {
+            labels: types.map(t => REPORT_TYPES[t].label),
+            datasets: [{ data: types.map(t => revenueByType[t]), backgroundColor: types.map(t => REPORT_TYPES[t].color + '99'), borderColor: types.map(t => REPORT_TYPES[t].color), borderWidth: 1, borderRadius: 8 }]
+          },
+          options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => formatJPY(ctx.parsed.x) } } }, scales: { x: { ticks: { callback: v => formatJPY(v) }, grid: { color: 'rgba(0,0,0,0.06)' } } } }
+        }));
+      }
+    }, 50);
+  }
+
+  // ===== PER-TYPE SECTIONS =====
+  if (loadedData.distribution) renderDistribution(dash);
+  if (loadedData.youtube) renderYouTube(dash);
+  if (loadedData.facebook) renderFacebook(dash);
+  if (loadedData.ugc) renderUGC(dash);
+
+  renderOverallTopSongs(dash);
+
+  dash.innerHTML += `<div style="text-align:center;margin:40px 0 60px"><button class="reset-btn" onclick="resetAll()">🔄 リセットして別のCSVを読み込む</button></div>`;
+}
+
+// ===== STORE COLOR MAP (fixed colors for pie charts) =====
+const STORE_COLORS = {
+  'Apple Music': '#fc3c44',
+  'iTunes Store': '#d94050',
+  'Spotify': '#1db954',
+  'LINE MUSIC': '#06c755',
+  'YouTube Music': '#ff0000',
+  'Amazon Music Unlimited': '#1a3a6b',
+  'Prime Music': '#2a5fad',
+  'AWA': '#ff6b2b',
+  'Rakuten Music': '#bf0000',
+  'auスマートパス': '#ff6600',
+  'genie': '#5b8def',
+  'mora': '#e040fb',
+  'KKBOX': '#09baf5',
+  'Deezer': '#a238ff',
+  'Tidal': '#000000',
+};
+const STORE_FALLBACK_COLORS = ['#ff2d78','#ff8c42','#ffd700','#22d3a0','#00c2ff','#8b5cf6','#ff6fa0','#aa88ff','#44ddbb','#ffaa66','#ff5577','#77bbff','#ddaa33','#55ddaa','#cc77ff'];
+
+function getStoreColor(storeName) {
+  return STORE_COLORS[storeName] || STORE_FALLBACK_COLORS[Object.keys(STORE_COLORS).length % STORE_FALLBACK_COLORS.length];
+}
+function getStoreColors(items) {
+  const used = {};
+  let fallbackIdx = 0;
+  return items.map(item => {
+    if (STORE_COLORS[item.key]) return STORE_COLORS[item.key];
+    if (!used[item.key]) { used[item.key] = STORE_FALLBACK_COLORS[fallbackIdx++ % STORE_FALLBACK_COLORS.length]; }
+    return used[item.key];
+  });
+}
+
+// ===== DISTRIBUTION (ストリーミング・DL) =====
+function renderDistribution(dash) {
+  const data = loadedData.distribution;
+  const info = REPORT_TYPES.distribution;
+
+  const byArtist = topN(groupBy(data, 'アーティスト'), rows => sumBy(rows, getRevenue), 10);
+  const byCountry = topN(groupBy(data, '国'), rows => sumBy(rows, getRevenue), 10);
+
+  // Streaming-only data
+  const streamingData = data.filter(r => r['販売形式'] === 'ストリーミング');
+  const streamStoreGroup = groupBy(streamingData, 'ストア');
+  const byStoreStreamRev = topN(streamStoreGroup, rows => sumBy(rows, getRevenue), 10);
+  const byStoreStreamReq = topN(streamStoreGroup, rows => sumBy(rows, getRequestCount), 10);
+
+  // Streaming unit price per store (top 15) — use pre-split revenue for true store payout rate
+  // Only show when pre-split revenue column exists (23-col full report), hide for 17-col simplified report
+  const hasPreSplitCol = data.length > 0 && (data[0].hasOwnProperty('手数料・利用料を引いた販売収益 (JPY)') || data[0].hasOwnProperty('手数料・利用料を引いた販売収益(JPY)'));
+  const getPreSplitRevenue = row => parseFloat(row['手数料・利用料を引いた販売収益 (JPY)'] || row['手数料・利用料を引いた販売収益(JPY)'] || '0') || 0;
+  const allStreamStores = hasPreSplitCol ? Object.entries(streamStoreGroup).map(([store, rows]) => {
+    const rev = sumBy(rows, getPreSplitRevenue);
+    const req = sumBy(rows, getRequestCount);
+    return { key: store, value: req > 0 ? rev / req : 0, rev, req };
+  }).filter(s => s.req > 0).sort((a, b) => b.value - a.value).slice(0, 15) : [];
+
+  // DL data for stacked bar
+  const dlData = data.filter(r => ['単曲DL','アルバムDL','リングトーンDL'].includes(r['販売形式']));
+  const allStoreGroup = groupBy(data, 'ストア');
+  const storeNames = Object.keys(allStoreGroup).sort((a, b) => sumBy(allStoreGroup[b], getRevenue) - sumBy(allStoreGroup[a], getRevenue)).slice(0, 10);
+  const storeStreamingRevData = storeNames.map(s => sumBy((allStoreGroup[s]||[]).filter(r => r['販売形式'] === 'ストリーミング'), getRevenue));
+  const storeDLRevData = storeNames.map(s => sumBy((allStoreGroup[s]||[]).filter(r => ['単曲DL','アルバムDL','リングトーンDL'].includes(r['販売形式'])), getRevenue));
+
+  // Song ranking
+  const songGroup = groupBy(data, '楽曲');
+  const songTop = topN(songGroup, rows => sumBy(rows, getRevenue), 10);
+
+  // Most played song (streaming only)
+  const streamSongGroup = groupBy(streamingData, '楽曲');
+  const mostPlayedSong = topN(streamSongGroup, rows => sumBy(rows, getRequestCount), 1);
+  const mostPlayedName = mostPlayedSong.length > 0 ? mostPlayedSong[0].key : '-';
+  const mostPlayedCount = mostPlayedSong.length > 0 ? mostPlayedSong[0].value : 0;
+  const mostPlayedArtist = mostPlayedSong.length > 0 ? (streamSongGroup[mostPlayedName][0]['アーティスト'] || '') : '';
+
+  // Top revenue song
+  const topRevSong = songTop.length > 0 ? songTop[0] : null;
+  const topRevSongArtist = topRevSong ? (songGroup[topRevSong.key][0]['アーティスト'] || '') : '';
+
+  let html = `
+    <div class="section">
+      <div class="section-title"><span class="emoji">🎵</span> ストリーミング・DL</div>
+      <div class="summary-row" style="margin-bottom:24px">
+        <div class="summary-card" style="animation-delay:0s">
+          <div class="glow" style="background:#ff2d78"></div>
+          <div class="label">🎧 ストリーミング再生数</div>
+          <div class="value" style="color:#ff2d78">${formatCountSimple(sumBy(streamingData, getRequestCount))}<span style="font-size:0.8rem;color:var(--text-dim)">回</span></div>
+          <div class="sub">収益: ${formatJPY(sumBy(streamingData, getRevenue))}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.1s">
+          <div class="glow" style="background:#ff8c42"></div>
+          <div class="label">⬇️ ダウンロード数</div>
+          <div class="value" style="color:#ff8c42">${formatCountSimple(sumBy(dlData, getRequestCount))}<span style="font-size:0.8rem;color:var(--text-dim)">件</span></div>
+          <div class="sub">収益: ${formatJPY(sumBy(dlData, getRevenue))}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.2s">
+          <div class="glow" style="background:#ffd700"></div>
+          <div class="label">🔥 最も聴かれた曲</div>
+          <div class="value" style="font-size:1.1rem;color:#ffd700;line-height:1.3">${mostPlayedName}</div>
+          <div class="sub">${mostPlayedArtist} — ${formatCount(mostPlayedCount)}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.3s">
+          <div class="glow" style="background:#22d3a0"></div>
+          <div class="label">💰 最も稼いだ曲</div>
+          <div class="value" style="font-size:1.1rem;color:#22d3a0;line-height:1.3">${topRevSong ? topRevSong.key : '-'}</div>
+          <div class="sub">${topRevSongArtist} — ${topRevSong ? formatJPY(topRevSong.value) : ''}</div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>🏪 ストア別 ストリーミング収益</h3><canvas id="chart-dist-stream-rev-pie"></canvas></div>
+        <div class="chart-card"><h3>🔊 ストア別 ストリーミング再生回数</h3><canvas id="chart-dist-stream-req-pie"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>🏪 ストア別収益（ストリーミング / DL）</h3><canvas id="chart-dist-store"></canvas></div>
+        <div class="chart-card"><h3>🔊 ストア別 ストリーミング再生回数</h3><canvas id="chart-dist-stream-req-bar"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="chart-grid">
+        ${hasPreSplitCol ? '<div class="chart-card"><h3>💹 ストア別 1再生あたりの単価</h3><canvas id="chart-dist-unit-price"></canvas></div>' : ''}
+        <div class="chart-card"><h3>🎤 アーティスト別収益 TOP10</h3><canvas id="chart-dist-artist"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>🌍 国別収益 TOP10</h3><canvas id="chart-dist-country"></canvas></div>
+        <div class="chart-card"></div>
+      </div>
+      <div style="height:20px"></div>
+      ${buildDistSongTable(songTop, songGroup, info.color)}
+    </div>`;
+  dash.innerHTML += html;
+
+  setTimeout(() => {
+    // Fixed-color pie: streaming revenue by store
+    const revColors = getStoreColors(byStoreStreamRev);
+    const revPieEl = document.getElementById('chart-dist-stream-rev-pie');
+    if (revPieEl && byStoreStreamRev.length) {
+      chartInstances.push(new Chart(revPieEl, {
+        type: 'doughnut',
+        data: { labels: byStoreStreamRev.map(i => i.key), datasets: [{ data: byStoreStreamRev.map(i => i.value), backgroundColor: revColors, borderWidth: 0, hoverOffset: 8 }] },
+        options: { cutout: '55%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatJPY(ctx.parsed)}` } } } }
+      }));
+    }
+    // Fixed-color pie: streaming play count by store
+    const reqColors = getStoreColors(byStoreStreamReq);
+    const reqPieEl = document.getElementById('chart-dist-stream-req-pie');
+    if (reqPieEl && byStoreStreamReq.length) {
+      chartInstances.push(new Chart(reqPieEl, {
+        type: 'doughnut',
+        data: { labels: byStoreStreamReq.map(i => i.key), datasets: [{ data: byStoreStreamReq.map(i => i.value), backgroundColor: reqColors, borderWidth: 0, hoverOffset: 8 }] },
+        options: { cutout: '55%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatCountSimple(ctx.parsed)}回` } } } }
+      }));
+    }
+    // Stacked bar: store revenue (streaming / DL)
+    const storeEl = document.getElementById('chart-dist-store');
+    if (storeEl) {
+      const storeLabels = storeNames.map(s => s.length > 18 ? s.slice(0,16)+'…' : s);
+      chartInstances.push(new Chart(storeEl, {
+        type: 'bar',
+        data: {
+          labels: storeLabels,
+          datasets: [
+            { label: 'ストリーミング', data: storeStreamingRevData, backgroundColor: '#ff2d7888', borderColor: '#ff2d78', borderWidth: 1, borderRadius: 4 },
+            { label: 'ダウンロード', data: storeDLRevData, backgroundColor: '#ff8c4288', borderColor: '#ff8c42', borderWidth: 1, borderRadius: 4 },
+          ]
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: { legend: { position: 'top', labels: { usePointStyle: true, font: { size: 11 }, padding: 12 } }, tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${formatJPY(ctx.parsed.x)}` } } },
+          scales: { x: { stacked: true, ticks: { callback: v => formatJPY(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }, y: { stacked: true, ticks: { font: { size: 11 } } } }
+        }
+      }));
+    }
+    // Bar: streaming play count by store (small chart)
+    const reqBarColors = getStoreColors(byStoreStreamReq);
+    makeBarChartColored('chart-dist-stream-req-bar', byStoreStreamReq, reqBarColors, v => formatCountSimple(v) + '回');
+    // Bar: unit price per stream
+    const unitPriceColors = getStoreColors(allStreamStores);
+    const unitEl = document.getElementById('chart-dist-unit-price');
+    if (unitEl && allStreamStores.length) {
+      chartInstances.push(new Chart(unitEl, {
+        type: 'bar',
+        data: {
+          labels: allStreamStores.map(i => i.key.length > 18 ? i.key.slice(0,16)+'…' : i.key),
+          datasets: [{ data: allStreamStores.map(i => i.value), backgroundColor: unitPriceColors.map(c => c + '88'), borderColor: unitPriceColors, borderWidth: 1, borderRadius: 6 }]
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => {
+            const item = allStreamStores[ctx.dataIndex];
+            return `1再生 = ¥${item.value.toFixed(4)}（収益${formatJPY(item.rev)} / ${formatCountSimple(item.req)}回）`;
+          } } } },
+          scales: { x: { ticks: { callback: v => '¥' + v.toFixed(2) }, grid: { color: 'rgba(0,0,0,0.06)' } }, y: { ticks: { font: { size: 11 } } } }
+        }
+      }));
+    }
+    makeBarChart('chart-dist-country', byCountry, info.color);
+    makeBarChart('chart-dist-artist', byArtist, info.color);
+  }, 80);
+}
+
+// Build distribution song table with streaming count + DL count
+function buildDistSongTable(songTop, songGroup, color) {
+  if (!songTop.length) return '';
+  const maxVal = songTop[0].value;
+  const streamingFormats = ['ストリーミング'];
+  const dlFormats = ['単曲DL', 'アルバムDL', 'リングトーンDL'];
+
+  const rows = songTop.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const allRows = songGroup[item.key];
+    const artist = allRows[0]['アーティスト'] || '';
+    const streamCount = sumBy(allRows.filter(r => streamingFormats.includes(r['販売形式'])), getRequestCount);
+    const dlCount = sumBy(allRows.filter(r => dlFormats.includes(r['販売形式'])), getRequestCount);
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.73rem">${artist}</span></td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${formatJPY(item.value)}</td>
+      <td class="stat-cell">🎧 <span class="stat-val">${formatCountSimple(streamCount)}</span></td>
+      <td class="stat-cell">⬇️ <span class="stat-val">${formatCountSimple(dlCount)}</span></td>
+      <td style="min-width:80px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="chart-card-full">
+    <h3>💰 楽曲別 収益ランキング TOP10</h3>
+    <table class="ranking-table">
+      <thead><tr><th style="width:36px">#</th><th>楽曲 / アーティスト</th><th style="text-align:right">収益</th><th>再生数</th><th>DL数</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ===== YOUTUBE =====
+function renderYouTube(dash) {
+  const data = loadedData.youtube;
+  const info = REPORT_TYPES.youtube;
+
+  const byArtist = topN(groupBy(data, 'アーティスト'), rows => sumBy(rows, getRevenue), 10);
+  const byService = topN(groupBy(data, 'サービス'), rows => sumBy(rows, getRevenue));
+  const byVideoType = topN(groupBy(data, '動画タイプ'), rows => sumBy(rows, getRequestCount));
+
+  // Song ranking
+  const songGroup = groupBy(data, '楽曲');
+  const songTop = topN(songGroup, rows => sumBy(rows, getRevenue), 10);
+
+  // Split by video type
+  const normalData = data.filter(r => r['動画タイプ'] === '動画');
+  const shortsData = data.filter(r => r['動画タイプ'] === 'ショート動画');
+  const normalViews = sumBy(normalData, getRequestCount);
+  const normalRev = sumBy(normalData, getRevenue);
+  const shortsViews = sumBy(shortsData, getRequestCount);
+  const shortsRev = sumBy(shortsData, getRevenue);
+
+  // Shorts: count unique video URLs
+  const shortsVideoUrls = new Set(shortsData.map(r => r['YouTube Video URL']).filter(u => u && u !== '削除済'));
+  const shortsVideoCount = shortsVideoUrls.size;
+
+  // Shorts song ranking (by creation count = unique video URLs)
+  const shortsSongGroup = groupBy(shortsData, '楽曲');
+  const shortsSongTop = topN(shortsSongGroup, rows => new Set(rows.map(r => r['YouTube Video URL']).filter(u => u && u !== '削除済')).size, 10);
+
+  // Most viewed song on Shorts
+  const topShortsSong = shortsSongTop.length > 0 ? shortsSongTop[0] : null;
+  const topShortsSongArtist = topShortsSong ? (shortsSongGroup[topShortsSong.key][0]['アーティスト'] || '') : '';
+
+  let html = `
+    <div class="section">
+      <div class="section-title"><span class="emoji">▶️</span> YouTube コンテンツ収益化</div>
+      <div class="summary-row" style="margin-bottom:24px">
+        <div class="summary-card" style="animation-delay:0s">
+          <div class="glow" style="background:#ff0000"></div>
+          <div class="label">📺 通常動画</div>
+          <div class="value" style="color:#ff4444">${formatCountSimple(normalViews)}<span style="font-size:0.8rem;color:var(--text-dim)">回</span></div>
+          <div class="sub">収益: ${formatJPY(normalRev)}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.1s">
+          <div class="glow" style="background:#ff8c42"></div>
+          <div class="label">📱 ショート動画</div>
+          <div class="value" style="color:#ff8c42">${formatCountSimple(shortsViews)}<span style="font-size:0.8rem;color:var(--text-dim)">回</span></div>
+          <div class="sub">収益: ${formatJPY(shortsRev)}${shortsVideoCount > 0 ? ` / ${shortsVideoCount}本の動画` : ''}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.2s">
+          <div class="glow" style="background:#ffd700"></div>
+          <div class="label">🔥 ショートで最も再生された曲</div>
+          <div class="value" style="font-size:1.1rem;color:#ffd700;line-height:1.3">${topShortsSong ? topShortsSong.key : '-'}</div>
+          <div class="sub">${topShortsSongArtist}${topShortsSong ? ' — ' + formatCount(topShortsSong.value) : ''}</div>
+        </div>
+        <div class="summary-card" style="animation-delay:0.3s">
+          <div class="glow" style="background:#22d3a0"></div>
+          <div class="label">💰 総収益</div>
+          <div class="value" style="color:#22d3a0">${formatJPY(sumBy(data, getRevenue))}</div>
+          <div class="sub">${Object.keys(songGroup).length}曲 / ${Object.keys(groupBy(data, 'アーティスト')).length}アーティスト</div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>📡 サービス別収益</h3><canvas id="chart-yt-service"></canvas></div>
+        <div class="chart-card"><h3>🎤 アーティスト別収益 TOP10</h3><canvas id="chart-yt-artist"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>📱 ショート動画 楽曲別 作成数</h3><canvas id="chart-yt-shorts-songs"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      ${buildYTSongTable(songTop, songGroup, data, info.color)}
+      ${buildYTShortsSongTable(shortsSongTop, shortsSongGroup)}
+    </div>`;
+  dash.innerHTML += html;
+
+  setTimeout(() => {
+    makeBarChart('chart-yt-service', byService, '#ff0000');
+    makeBarChart('chart-yt-artist', byArtist, info.color);
+    // Shorts songs bar chart
+    if (shortsSongTop.length > 0) {
+      const shortsBarEl = document.getElementById('chart-yt-shorts-songs');
+      if (shortsBarEl) {
+        const sLabels = shortsSongTop.map(i => i.key.length > 22 ? i.key.slice(0,20)+'…' : i.key);
+        chartInstances.push(new Chart(shortsBarEl, {
+          type: 'bar',
+          data: { labels: sLabels, datasets: [{ data: shortsSongTop.map(i => i.value), backgroundColor: '#ff8c4288', borderColor: '#ff8c42', borderWidth: 1, borderRadius: 6 }] },
+          options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.x + '本' } } }, scales: { x: { ticks: { callback: v => v + '本', stepSize: 1 }, grid: { color: 'rgba(0,0,0,0.06)' } }, y: { ticks: { font: { size: 10 } } } } }
+        }));
+      }
+    }
+  }, 120);
+}
+
+// YouTube main song table (with shorts breakdown)
+function buildYTSongTable(songTop, songGroup, allData, color) {
+  if (!songTop.length) return '';
+  const maxVal = songTop[0].value;
+  const rows = songTop.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const allRows = songGroup[item.key];
+    const artist = allRows[0]['アーティスト'] || '';
+    const totalViews = sumBy(allRows, getRequestCount);
+    const shortsViews = sumBy(allRows.filter(r => r['動画タイプ'] === 'ショート動画'), getRequestCount);
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.73rem">${artist}</span></td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${formatJPY(item.value)}</td>
+      <td class="stat-cell">👀 <span class="stat-val">${formatCountSimple(totalViews)}</span></td>
+      <td class="stat-cell">${shortsViews > 0 ? '📱 <span class="stat-val">' + formatCountSimple(shortsViews) + '</span>' : '<span style="color:var(--border)">-</span>'}</td>
+      <td style="min-width:80px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="chart-card-full">
+    <h3>💰 楽曲別 YouTube収益ランキング TOP10</h3>
+    <table class="ranking-table">
+      <thead><tr><th style="width:36px">#</th><th>楽曲 / アーティスト</th><th style="text-align:right">収益</th><th>視聴回数</th><th>うちショート</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// Shorts-only song ranking table
+function buildYTShortsSongTable(shortsSongTop, shortsSongGroup) {
+  if (!shortsSongTop.length) return '';
+  const maxVal = shortsSongTop[0].value;
+  const rows = shortsSongTop.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const allRows = shortsSongGroup[item.key];
+    const artist = allRows[0]['アーティスト'] || '';
+    const rev = sumBy(allRows, getRevenue);
+    const videoCount = new Set(allRows.map(r => r['YouTube Video URL']).filter(u => u && u !== '削除済')).size;
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.73rem">${artist}</span></td>
+      <td style="text-align:right;font-weight:600;white-space:nowrap">${formatCountSimple(item.value)}回</td>
+      <td class="stat-cell">🎬 <span class="stat-val">${videoCount}本</span></td>
+      <td class="stat-cell">💰 <span class="stat-val">${formatJPY(rev)}</span></td>
+      <td style="min-width:80px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:#ff8c42"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="chart-card-full">
+    <h3>📱 ショート動画で使われた楽曲ランキング TOP10</h3>
+    <table class="ranking-table">
+      <thead><tr><th style="width:36px">#</th><th>楽曲 / アーティスト</th><th style="text-align:right">視聴回数</th><th>動画数</th><th>収益</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ===== META (Facebook) =====
+function renderFacebook(dash) {
+  const data = loadedData.facebook;
+  const info = REPORT_TYPES.facebook;
+
+  const byArtist = topN(groupBy(data, 'アーティスト'), rows => sumBy(rows, getRevenue), 10);
+  const byPlatform = topN(groupBy(data, 'プラットフォーム'), rows => sumBy(rows, getRevenue));
+  const byEvent = topN(groupBy(data, 'イベント'), rows => sumBy(rows, getRevenue), 10);
+  const byCountry = topN(groupBy(data, '国'), rows => sumBy(rows, getRevenue), 10);
+
+  const songGroup = groupBy(data, '楽曲');
+  const songTop = topN(songGroup, rows => sumBy(rows, getRevenue), 10);
+
+  let html = `
+    <div class="section">
+      <div class="section-title"><span class="emoji">📘</span> Meta</div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>📱 プラットフォーム別収益</h3><canvas id="chart-fb-platform"></canvas></div>
+        <div class="chart-card"><h3>🎪 イベント別収益</h3><canvas id="chart-fb-event"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>🌍 国別収益 TOP10</h3><canvas id="chart-fb-country"></canvas></div>
+        <div class="chart-card"><h3>🎤 アーティスト別収益 TOP10</h3><canvas id="chart-fb-artist"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      ${buildFBSongTable(songTop, songGroup, info.color)}
+    </div>`;
+  dash.innerHTML += html;
+
+  setTimeout(() => {
+    makePieChart('chart-fb-platform', byPlatform, ['#00c2ff','#8b5cf6','#22d3a0','#ff8c42']);
+    makeBarChart('chart-fb-event', byEvent, info.color);
+    makeBarChart('chart-fb-country', byCountry, info.color);
+    makeBarChart('chart-fb-artist', byArtist, info.color);
+  }, 160);
+}
+
+function buildFBSongTable(songTop, songGroup, color) {
+  if (!songTop.length) return '';
+  const maxVal = songTop[0].value;
+  const rows = songTop.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const allRows = songGroup[item.key];
+    const artist = allRows[0]['アーティスト'] || '';
+    const plays = sumBy(allRows, getRequestCount);
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.73rem">${artist}</span></td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${formatJPY(item.value)}</td>
+      <td class="stat-cell">▶️ <span class="stat-val">${formatCountSimple(plays)}</span></td>
+      <td style="min-width:80px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="chart-card-full">
+    <h3>💰 楽曲別 Meta収益ランキング TOP10</h3>
+    <table class="ranking-table">
+      <thead><tr><th style="width:36px">#</th><th>楽曲 / アーティスト</th><th style="text-align:right">収益</th><th>再生数</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ===== UGC (TikTok etc) =====
+function renderUGC(dash) {
+  const data = loadedData.ugc;
+  const info = REPORT_TYPES.ugc;
+
+  const byArtist = topN(groupBy(data, 'アーティスト'), rows => sumBy(rows, getRevenue), 10);
+  const byCountry = topN(groupBy(data, '国'), rows => sumBy(rows, getRevenue), 10);
+
+  const songGroup = groupBy(data, '楽曲');
+  const songTop = topN(songGroup, rows => sumBy(rows, getRevenue), 10);
+
+  let html = `
+    <div class="section">
+      <div class="section-title"><span class="emoji">🎶</span> TikTok・UGC</div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>🌍 国別収益 TOP10</h3><canvas id="chart-ugc-country"></canvas></div>
+        <div class="chart-card"><h3>🎤 アーティスト別収益 TOP10</h3><canvas id="chart-ugc-artist"></canvas></div>
+      </div>
+      <div style="height:20px"></div>
+      ${buildUGCSongTable(songTop, songGroup, data, info.color)}
+    </div>`;
+  dash.innerHTML += html;
+
+  setTimeout(() => {
+    makeBarChart('chart-ugc-country', byCountry, info.color);
+    makeBarChart('chart-ugc-artist', byArtist, info.color);
+  }, 200);
+}
+
+function buildUGCSongTable(songTop, songGroup, allData, color) {
+  if (!songTop.length) return '';
+  const maxVal = songTop[0].value;
+
+  // Identify views vs creations services
+  const viewsServices = ['TikTok Views', 'クラシル Views'];
+  const creationsServices = ['TikTok Creations', 'クラシル Creations'];
+
+  const rows = songTop.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const allRows = songGroup[item.key];
+    const artist = allRows[0]['アーティスト'] || '';
+    const viewCount = sumBy(allRows.filter(r => viewsServices.includes(r['サービス'])), getRequestCount);
+    const creationCount = sumBy(allRows.filter(r => creationsServices.includes(r['サービス'])), getRequestCount);
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.73rem">${artist}</span></td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${formatJPY(item.value)}</td>
+      <td class="stat-cell">▶️ <span class="stat-val">${formatCountSimple(viewCount)}</span></td>
+      <td class="stat-cell">🎬 <span class="stat-val">${formatCountSimple(creationCount)}</span></td>
+      <td style="min-width:80px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:${color}"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="chart-card-full">
+    <h3>💰 楽曲別 収益ランキング TOP10</h3>
+    <table class="ranking-table">
+      <thead><tr><th style="width:36px">#</th><th>楽曲 / アーティスト</th><th style="text-align:right">収益</th><th>再生数</th><th>作成数</th><th style="width:90px"></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ===== OVERALL TOP SONGS =====
+function renderOverallTopSongs(dash) {
+  const allData = Object.values(loadedData).flat();
+  const bySong = groupBy(allData, '楽曲');
+  const top = topN(bySong, rows => sumBy(rows, getRevenue), 15);
+  if (top.length === 0) return;
+  const maxVal = top[0].value;
+
+  let rows = top.map((item, i) => {
+    const pct = maxVal > 0 ? (item.value / maxVal * 100) : 0;
+    const rankClass = i < 1 ? 'rank-1' : i < 2 ? 'rank-2' : i < 3 ? 'rank-3' : 'rank-other';
+    const songRows = bySong[item.key];
+    const artist = songRows[0]['アーティスト'] || '';
+    const typeLabels = [];
+    Object.entries(loadedData).forEach(([type, data]) => {
+      if (data.some(r => r['楽曲'] === item.key)) {
+        typeLabels.push(`<span style="color:${REPORT_TYPES[type].color};font-size:0.7rem">${REPORT_TYPES[type].label}</span>`);
+      }
+    });
+
+    return `<tr class="${i < 3 ? 'top-rank rank-row-' + (i+1) : ''}">
+      <td><span class="rank-num ${rankClass}">${i+1}</span></td>
+      <td><strong>${item.key}</strong><br><span style="color:var(--text-dim);font-size:0.75rem">${artist}</span></td>
+      <td>${typeLabels.join(' ')}</td>
+      <td style="text-align:right;font-weight:700;white-space:nowrap">${formatJPY(item.value)}</td>
+      <td style="min-width:100px"><div class="revenue-bar"><div class="revenue-bar-fill" style="width:${pct}%;background:linear-gradient(90deg,#ff2d78,#ffd700)"></div></div></td>
+    </tr>`;
+  }).join('');
+
+  dash.innerHTML += `
+    <div class="section">
+      <div class="section-title"><span class="emoji">🏆</span> 全レポート合算 楽曲収益ランキング TOP15</div>
+      <div class="chart-card-full">
+        <table class="ranking-table">
+          <thead><tr><th style="width:40px">#</th><th>楽曲 / アーティスト</th><th>レポート</th><th style="text-align:right">収益</th><th style="width:120px"></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ===== CHART BUILDERS =====
+function makeBarChartColored(id, items, colors, tooltipFmt) {
+  const el = document.getElementById(id);
+  if (!el || !items.length) return;
+  const labels = items.map(i => i.key.length > 20 ? i.key.slice(0,18)+'…' : i.key);
+  const fmt = tooltipFmt || (v => formatJPY(v));
+  chartInstances.push(new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: items.map(i => i.value), backgroundColor: colors.map(c => c + '88'), borderColor: colors, borderWidth: 1, borderRadius: 6 }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => fmt(ctx.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => fmt(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }, y: { ticks: { font: { size: 11 } } } }
+    }
+  }));
+}
+
+function makeBarChart(id, items, color) {
+  const el = document.getElementById(id);
+  if (!el || !items.length) return;
+  const labels = items.map(i => i.key.length > 30 ? i.key.slice(0,28)+'…' : i.key);
+  chartInstances.push(new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ data: items.map(i => i.value), backgroundColor: color + '55', borderColor: color, borderWidth: 1, borderRadius: 6 }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => formatJPY(ctx.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => formatJPY(v) }, grid: { color: 'rgba(0,0,0,0.06)' } }, y: { ticks: { font: { size: 10 }, autoSkip: false } } },
+      layout: { padding: { left: 4 } }
+    }
+  }));
+}
+
+function makePieChart(id, items, colors) {
+  const el = document.getElementById(id);
+  if (!el || !items.length) return;
+  chartInstances.push(new Chart(el, {
+    type: 'doughnut',
+    data: {
+      labels: items.map(i => i.key),
+      datasets: [{ data: items.map(i => i.value), backgroundColor: colors.slice(0, items.length), borderWidth: 0, hoverOffset: 8 }]
+    },
+    options: {
+      cutout: '55%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label}: ${formatJPY(ctx.parsed)}` } } }
+    }
+  }));
+}
+
+// ===== CONFETTI =====
+function launchConfetti() {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  document.body.appendChild(container);
+  const colors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ec4899','#06b6d4'];
+  for (let i = 0; i < 60; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random() * 100 + '%';
+    piece.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.width = (6 + Math.random() * 8) + 'px';
+    piece.style.height = (6 + Math.random() * 8) + 'px';
+    piece.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+    piece.style.animationDuration = (2 + Math.random() * 2) + 's';
+    piece.style.animationDelay = Math.random() * 0.8 + 's';
+    container.appendChild(piece);
+  }
+  setTimeout(() => container.remove(), 5000);
+}
+
+// ===== RESET =====
+function resetAll() {
+  loadedData = {};
+  destroyCharts();
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('dashboard').innerHTML = '';
+  document.getElementById('loadedFiles').innerHTML = '';
+}
+
+// ===== DROP ZONE =====
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if (e.target.files.length) processFiles(e.target.files); });
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files); });
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+</script>
+</body>
+</html>
